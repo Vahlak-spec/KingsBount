@@ -1,0 +1,9 @@
+﻿Library
+.vs
+Logs
+Temp
+UserSettings
+obj
+.vsconfig
+*.csproj
+KingsBouns.sln

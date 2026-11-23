@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed811ab13ec513343b38d85068b0e6fd, type: 3}
+  m_Name: ForestTile
+  m_EditorClassIdentifier: Assembly-CSharp::KingdomBouns.CityMap.SmartTile
+  mode: 0
+  groups: []
+  variants:
+  - prefab: {fileID: 845954071484779498, guid: 378fad431cede7e4889358189ecdc002, type: 3}
+    weight: 2
+  - prefab: {fileID: 845954071484779498, guid: 696230b79cced054c93bedd94b9bc605, type: 3}
+    weight: 1
+  - prefab: {fileID: 845954071484779498, guid: 995d8f6a7eb39094ab1a0e8ec5a7c9b9, type: 3}
+    weight: 1
+  randomRotation: 1
+  shapes: []
+  connectOutside: 0
