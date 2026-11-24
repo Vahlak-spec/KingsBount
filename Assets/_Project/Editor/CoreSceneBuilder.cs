@@ -94,7 +94,7 @@ namespace KingdomBouns.EditorTools
         [MenuItem(MENU + "Додати Bootstrap гри в поточну сцену")]
         public static void AddGameBootstrap()
         {
-            GameSceneBinder existing = Object.FindAnyObjectByType<GameSceneBinder>();
+            CitySceneBinder existing = Object.FindAnyObjectByType<CitySceneBinder>();
             if (existing != null)
             {
                 Selection.activeObject = existing.gameObject;
@@ -106,7 +106,7 @@ namespace KingdomBouns.EditorTools
             var bootstrap = new GameObject("[Bootstrap]");
             Undo.RegisterCreatedObjectUndo(bootstrap, "Add Game Bootstrap");
             Ticker ticker = bootstrap.AddComponent<Ticker>();
-            GameSceneBinder binder = bootstrap.AddComponent<GameSceneBinder>();
+            CitySceneBinder binder = bootstrap.AddComponent<CitySceneBinder>();
 
             var pools = new GameObject("[Pools]").transform;
             pools.SetParent(bootstrap.transform, false);

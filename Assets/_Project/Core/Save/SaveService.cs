@@ -16,7 +16,6 @@ namespace KingdomBouns.Core
     {
         public const string DEFAULT_FOLDER = "Saves";
 
-        /// <summary>Сигнал сервісам записати свій стан через Save().</summary>
         public event Action onSaveRequested;
 
         public bool HasSave => _storage.Any();

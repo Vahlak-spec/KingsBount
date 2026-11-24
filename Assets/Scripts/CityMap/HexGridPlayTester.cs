@@ -13,14 +13,14 @@ namespace KingdomBouns.CityMap
     /// Якщо в сцені є CityCameraController, дія виконується по його кліку (натиснув і відпустив без драгу),
     /// тож перетягування камери не ставить тайли.
     /// 1 / 2 / 3 — Поставити / Видалити / Повернути.  Q / E — поворот тайла для встановлення.
-    /// Z / X — попередній / наступний елемент палітри (префаб або розумний тайл).
+    /// Z / X — попередній / наступний тип клітинки (з тих, що мають тайл у палітрі).
     /// </summary>
     public class HexGridPlayTester : MonoBehaviour
     {
         public HexGrid grid;
         public Camera cam;
-        public HexTilePalette palette;
-        public int prefabIndex;
+        [Tooltip("Який тип ставити. Вигляд — з палітри сітки.")]
+        public HexCellType type = HexCellType.Meadow;
         public HexAction action = HexAction.Place;
         [Range(0, 5)] public int turn;
         [Tooltip("Камера з драгом. Порожньо — знайде сама; якщо нема, клік спрацьовує одразу при натисканні.")]
@@ -62,8 +62,7 @@ namespace KingdomBouns.CityMap
         private void ApplyAt(HexHit target)
         {
             var act = ShiftHeld() ? HexAction.Remove : action;
-            var item = palette != null ? palette.Get(prefabIndex) : null;
-            bool changed = grid.Apply(act, target.cell, item, turn);
+            bool changed = grid.Apply(act, target.cell, type, turn);
             if (logClicks)
                 Debug.Log($"[HexGrid] {act} {target.cell} inside={target.inside} tile={(target.HasTile ? target.tile.name : "-")} " +
                           $"collider={target.fromCollider} → {(changed ? "змінено" : "без змін")}");
@@ -104,8 +103,8 @@ namespace KingdomBouns.CityMap
             if (k.digit3Key.wasPressedThisFrame) action = HexAction.Rotate;
             if (k.qKey.wasPressedThisFrame) turn = HexMath.Mod6(turn - 1);
             if (k.eKey.wasPressedThisFrame) turn = HexMath.Mod6(turn + 1);
-            if (k.zKey.wasPressedThisFrame) CyclePrefab(-1);
-            if (k.xKey.wasPressedThisFrame) CyclePrefab(+1);
+            if (k.zKey.wasPressedThisFrame) CycleType(-1);
+            if (k.xKey.wasPressedThisFrame) CycleType(+1);
         }
 #else
         private static bool TryGetPointer(out Vector2 pos) { pos = Input.mousePosition; return true; }
@@ -119,16 +118,22 @@ namespace KingdomBouns.CityMap
             if (Input.GetKeyDown(KeyCode.Alpha3)) action = HexAction.Rotate;
             if (Input.GetKeyDown(KeyCode.Q)) turn = HexMath.Mod6(turn - 1);
             if (Input.GetKeyDown(KeyCode.E)) turn = HexMath.Mod6(turn + 1);
-            if (Input.GetKeyDown(KeyCode.Z)) CyclePrefab(-1);
-            if (Input.GetKeyDown(KeyCode.X)) CyclePrefab(+1);
+            if (Input.GetKeyDown(KeyCode.Z)) CycleType(-1);
+            if (Input.GetKeyDown(KeyCode.X)) CycleType(+1);
         }
 #endif
 
-        private void CyclePrefab(int d)
+        /// <summary>Наступний/попередній тип, для якого в палітрі сітки є тайл.</summary>
+        private void CycleType(int d)
         {
-            if (palette == null || palette.Count == 0) return;
-            int n = palette.Count;
-            prefabIndex = ((prefabIndex + d) % n + n) % n;
+            var pal = grid != null ? grid.Palette : null;
+            if (pal == null) return;
+            var types = new System.Collections.Generic.List<HexCellType>();
+            foreach (var e in pal.Entries) if (e.type != HexCellType.None && e.tile != null) types.Add(e.type);
+            if (types.Count == 0) return;
+            int i = types.IndexOf(type);
+            int n = types.Count;
+            type = types[((i < 0 ? 0 : i + d) % n + n) % n];
         }
 
         // ------------------------------------------------------------ підсвітка
@@ -170,15 +175,14 @@ namespace KingdomBouns.CityMap
         private void OnGUI()
         {
             if (!showInfo) return;
-            var item = palette != null ? palette.Get(prefabIndex) : null;
             string cellInfo = hasHit
                 ? $"Клітинка: ({hit.cell.x}, {hit.cell.y})  {(hit.inside ? "в межах" : "ПОЗА МЕЖЕЮ")}\n" +
-                  $"Стоїть: {(hit.HasTile ? $"{(hit.tile.prefab != null ? hit.tile.prefab.name : hit.tile.name)} поворот {hit.tile.turn * 60}°{(hit.tile.smart != null ? " [" + hit.tile.smart.name + "]" : "")}" : "порожньо")}\n" +
+                  $"Стоїть: {(hit.HasTile ? hit.tile.type + " поворот " + (hit.tile.turn * 60) + "° варіант " + hit.tile.variant : "порожньо")}\n" +
                   $"Влучання: {(hit.fromCollider ? "колайдер" : "площина")}"
                 : "Курсор не над сіткою";
             GUI.Box(new Rect(10, 10, 330, 120),
                 $"{cellInfo}\n\nДія: {action} [1/2/3]   Поворот: {turn * 60}° [Q/E]\n" +
-                $"Тайл: {(item != null ? item.name + (item is SmartTile ? " (розумний)" : "") : "—")} [Z/X]\nShift+ЛКМ — видалити");
+                $"Тип: {type} [Z/X]\nShift+ЛКМ — видалити");
         }
     }
 }

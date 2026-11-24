@@ -22,7 +22,7 @@ namespace KingdomBouns.CityMap.EditorTools
             using (new EditorGUILayout.HorizontalScope())
             {
                 var grid = FindAnyObjectByType<HexGrid>();
-                using (new EditorGUI.DisabledScope(grid == null || grid.Data == null))
+                using (new EditorGUI.DisabledScope(grid == null || grid.Map == null))
                 {
                     if (GUILayout.Button(new GUIContent("Межі за HexGrid", "Прямокутник навколо гекса міста з відступом")))
                     {

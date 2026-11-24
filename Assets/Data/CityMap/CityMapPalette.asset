@@ -12,7 +12,40 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b042cdabbc6c5eb4c97b667f1e2e199b, type: 3}
   m_Name: CityMapPalette
   m_EditorClassIdentifier: Assembly-CSharp::KingdomBouns.CityMap.HexTilePalette
-  items:
+  entries:
+  - type: 1
+    tile: {fileID: 11400000, guid: 535fe7603af080a45a864e90d1830511, type: 2}
+  - type: 2
+    tile: {fileID: 9079940047317954292, guid: decb621e70d3cfa43a8217d632107da9, type: 3}
+  - type: 3
+    tile: {fileID: 11400000, guid: fbeb27309ce675842918cdadc8d9e108, type: 2}
+  - type: 4
+    tile: {fileID: 11400000, guid: 46e6cb453528173429621b474f69239c, type: 2}
+  - type: 100
+    tile: {fileID: 0}
+  - type: 101
+    tile: {fileID: 0}
+  - type: 102
+    tile: {fileID: 0}
+  - type: 103
+    tile: {fileID: 0}
+  - type: 104
+    tile: {fileID: 0}
+  - type: 105
+    tile: {fileID: 0}
+  - type: 106
+    tile: {fileID: 0}
+  - type: 107
+    tile: {fileID: 0}
+  - type: 108
+    tile: {fileID: 0}
+  - type: 109
+    tile: {fileID: 0}
+  - type: 110
+    tile: {fileID: 0}
+  - type: 111
+    tile: {fileID: 0}
+  legacyItems:
   - {fileID: 7054884497961186720, guid: daeba369e06d8754ea30cfe74aae13b3, type: 3}
   - {fileID: 773744580326793086, guid: 8367d2f2e86754a48bd4ed57f95fc6a9, type: 3}
   - {fileID: 530844656166863798, guid: f79d92ec639227046a1d27db08405d43, type: 3}

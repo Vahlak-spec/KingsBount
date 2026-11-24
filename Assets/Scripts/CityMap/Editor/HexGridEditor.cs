@@ -12,16 +12,16 @@ namespace KingdomBouns.CityMap.EditorTools
             var grid = (HexGrid)target;
 
             EditorGUILayout.Space(8);
-            if (grid.Data != null)
-                EditorGUILayout.LabelField($"Радіус {grid.Radius}: клітинок {HexMath.CountInRadius(grid.Radius)}, тайлів {grid.Data.Entries.Count}",
+            if (grid.Map != null)
+                EditorGUILayout.LabelField($"Радіус {grid.Radius}: клітинок {HexMath.CountInRadius(grid.Radius)}, заповнено {grid.Map.Count}",
                     EditorStyles.miniLabel);
 
             if (GUILayout.Button("Відкрити Hex Map Editor", GUILayout.Height(26)))
                 HexMapEditorWindow.OpenFor(grid);
 
-            using (new EditorGUI.DisabledScope(grid.Data == null || EditorApplication.isPlaying))
+            using (new EditorGUI.DisabledScope(EditorApplication.isPlaying))
             {
-                if (GUILayout.Button("Перебудувати з даних"))
+                if (GUILayout.Button(new GUIContent("Перебудувати з даних", "Наприклад, після зміни палітри")))
                 {
                     Undo.IncrementCurrentGroup();
                     int g = Undo.GetCurrentGroup();

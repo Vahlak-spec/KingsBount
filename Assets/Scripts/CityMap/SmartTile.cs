@@ -172,6 +172,49 @@ namespace KingdomBouns.CityMap
             return pick.prefab != null;
         }
 
+        // ------------------------------------------------------------ індекси варіантів (для збереження в HexMapData)
+
+        /// <summary>
+        /// Наскрізний індекс префаба: для Random — позиція у variants, для Connected — по всіх формах підряд.
+        /// -1, якщо префаба в тайлі нема.
+        /// </summary>
+        public int IndexOfVariant(GameObject prefab)
+        {
+            if (prefab == null) return -1;
+            if (mode == Mode.Random)
+            {
+                for (int i = 0; i < variants.Count; i++) if (variants[i] != null && variants[i].prefab == prefab) return i;
+                return -1;
+            }
+            int n = 0;
+            foreach (var s in shapes)
+                foreach (var v in s.variants)
+                {
+                    if (v != null && v.prefab == prefab) return n;
+                    n++;
+                }
+            return -1;
+        }
+
+        /// <summary>Префаб за наскрізним індексом (null, якщо індекс поза списком — наприклад, тайл змінили).</summary>
+        public GameObject VariantAt(int index)
+        {
+            if (index < 0) return null;
+            if (mode == Mode.Random)
+                return index < variants.Count && variants[index] != null ? variants[index].prefab : null;
+            int n = 0;
+            foreach (var s in shapes)
+            {
+                if (index < n + s.variants.Count)
+                {
+                    var v = s.variants[index - n];
+                    return v != null ? v.prefab : null;
+                }
+                n += s.variants.Count;
+            }
+            return null;
+        }
+
         // ------------------------------------------------------------ утиліти масок
 
         /// <summary>Поворот маски: ребро e переходить у ребро e + k.</summary>

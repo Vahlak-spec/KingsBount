@@ -1,8 +1,11 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
+using UnityEngine.Serialization;
+using Object = UnityEngine.Object;
 
 namespace KingdomBouns.CityMap
 {
@@ -15,7 +18,7 @@ namespace KingdomBouns.CityMap
         public Vector2Int cell;
         /// <summary>Точка влучання у світових координатах.</summary>
         public Vector3 point;
-        /// <summary>Клітинка в межах радіуса міста.</summary>
+        /// <summary>Клітинка в межах радіуса карти.</summary>
         public bool inside;
         /// <summary>Тайл, що стоїть на клітинці (null, якщо порожньо).</summary>
         public HexCell tile;
@@ -26,15 +29,23 @@ namespace KingdomBouns.CityMap
     }
 
     /// <summary>
-    /// Кастомна гексова сітка міста. Працює і в Edit mode (через редактор), і в Play mode.
-    /// Джерело правди — CityMapData; об'єкти тайлів лежать у дочірньому "Tiles".
+    /// Вигляд гексової карти. Дані — HexMapData (лише типи клітинок, поворот і варіант),
+    /// вигляд кожного типу бере з HexTilePalette. Тайли лежать у дочірньому "Tiles".
+    ///
+    /// У грі карту передає HexMapService (SetMap). У редакторі карта лежить прямо в компоненті
+    /// (поле map серіалізується разом зі сценою), а Hex Map Editor завантажує/зберігає її в JSON.
     /// У редакторі всі дії йдуть через Undo, у Play mode — звичайні Instantiate/Destroy.
     /// </summary>
     [DisallowMultipleComponent]
     public class HexGrid : MonoBehaviour
     {
-        [SerializeField] private CityMapData data;
+        [SerializeField] private HexTilePalette palette;
+        [SerializeField] private HexMapData map = new HexMapData();
         [SerializeField] private Transform tilesRoot;
+
+        [Tooltip("Старий формат карти (до enum). Лише для імпорту в Hex Map Editor.")]
+        [FormerlySerializedAs("data")]
+        [SerializeField, HideInInspector] private CityMapData legacyData;
 
         [Header("Рейкаст")]
         [Tooltip("Спершу шукати влучання в колайдери тайлів, потім у площину сітки.")]
@@ -42,15 +53,14 @@ namespace KingdomBouns.CityMap
         [SerializeField] private LayerMask raycastMask = ~0;
         [SerializeField] private float maxRayDistance = 2000f;
 
-        [Header("Play mode")]
-        [Tooltip("У Play mode працювати з копією даних, щоб зміни не записувались в асет.")]
-        [SerializeField] private bool cloneDataInPlayMode = true;
-        [Tooltip("Перебудувати тайли з даних при старті.")]
-        [SerializeField] private bool rebuildOnStart = false;
-
         [Header("Гізмо")]
         [SerializeField] private bool drawGrid = true;
         [SerializeField] private Color gridColor = new Color(1f, 1f, 1f, 0.35f);
+
+        /// <summary>Вміст клітинки змінився (поставили, прибрали, повернули, перебудувався сусід).</summary>
+        public event Action<Vector2Int> CellChanged;
+        /// <summary>Усю карту перебудовано з даних.</summary>
+        public event Action MapRebuilt;
 
         private readonly Dictionary<Vector2Int, HexCell> instances = new Dictionary<Vector2Int, HexCell>();
         private bool cacheValid;
@@ -58,14 +68,23 @@ namespace KingdomBouns.CityMap
 
         // ------------------------------------------------------------ властивості
 
-        public CityMapData Data
+        public HexMapData Map => map;
+
+        /// <summary>Стара CityMapData, якщо сітку створили до переходу на HexMapData (для імпорту).</summary>
+        public CityMapData LegacyData
         {
-            get => data;
-            set { data = value; cacheValid = false; }
+            get => legacyData;
+            set => legacyData = value;
         }
 
-        public int Radius => data != null ? data.radius : 0;
-        public float HexSize => data != null ? data.hexSize : 1f;
+        public HexTilePalette Palette
+        {
+            get => palette;
+            set => palette = value;
+        }
+
+        public int Radius => map != null ? map.radius : 0;
+        public float HexSize => map != null ? map.hexSize : 1f;
 
         public Transform TilesRoot
         {
@@ -86,17 +105,15 @@ namespace KingdomBouns.CityMap
             }
         }
 
-        // ------------------------------------------------------------ життєвий цикл
-
-        private void Awake()
+        /// <summary>
+        /// Підміняє карту. Сітка працює з тим самим екземпляром — зміни через Place/Remove/Rotate
+        /// одразу потрапляють у переданий HexMapData.
+        /// </summary>
+        public void SetMap(HexMapData newMap, bool rebuild = true)
         {
-            if (!Application.isPlaying) return;
-            if (cloneDataInPlayMode && data != null)
-            {
-                data = Instantiate(data);
-                data.name += " (runtime)";
-            }
-            if (rebuildOnStart) RebuildFromData();
+            map = newMap ?? new HexMapData();
+            InvalidateCache();
+            if (rebuild) RebuildFromData();
         }
 
         // ------------------------------------------------------------ координати
@@ -105,7 +122,7 @@ namespace KingdomBouns.CityMap
 
         public Vector2Int WorldToCell(Vector3 world) => HexMath.LocalToCell(transform.InverseTransformPoint(world), HexSize);
 
-        public bool IsInside(Vector2Int cell) => data != null && data.IsInside(cell);
+        public bool IsInside(Vector2Int cell) => map != null && map.IsInside(cell);
 
         /// <summary>Кути клітинки у світових координатах (6 точок).</summary>
         public void GetCellCorners(Vector2Int cell, Vector3[] result, float inset = 0f)
@@ -124,7 +141,7 @@ namespace KingdomBouns.CityMap
         public bool Raycast(Ray ray, out HexHit hit)
         {
             hit = default;
-            if (data == null) return false;
+            if (map == null) return false;
 
             if (usePhysics)
             {
@@ -164,7 +181,12 @@ namespace KingdomBouns.CityMap
             return null;
         }
 
-        public void InvalidateCache() => cacheValid = false;
+        /// <summary>Скинути кеші (після Undo/Redo або ручних змін в ієрархії).</summary>
+        public void InvalidateCache()
+        {
+            cacheValid = false;
+            map?.InvalidateIndex();
+        }
 
         // Кеш сам себе перевіряє: після Undo/Redo або ручного видалення в ієрархії
         // змінюється кількість дітей або посилання стає null — тоді він перебудовується.
@@ -188,134 +210,148 @@ namespace KingdomBouns.CityMap
 
         // ------------------------------------------------------------ дії
 
-        /// <summary>
-        /// Застосовує дію до клітинки. item — префаб (GameObject) або розумний тайл (SmartTile).
-        /// rotateSteps — на скільки кроків по 60° повертати (для Rotate).
-        /// </summary>
-        public bool Apply(HexAction action, Vector2Int cell, Object item = null, int turn = 0, int rotateSteps = 1)
+        /// <summary>Застосовує дію до клітинки. rotateSteps — на скільки кроків по 60° повертати (для Rotate).</summary>
+        public bool Apply(HexAction action, Vector2Int cell, HexCellType type = HexCellType.None, int turn = 0, int rotateSteps = 1)
         {
             switch (action)
             {
-                case HexAction.Place: return Place(cell, item, turn);
+                case HexAction.Place: return Place(cell, type, turn);
                 case HexAction.Remove: return Remove(cell);
                 case HexAction.Rotate: return Rotate(cell, rotateSteps);
                 default: return false;
             }
         }
 
-        /// <summary>Ставить префаб або розумний тайл. Повертає false, якщо нічого не змінилося.</summary>
-        public bool Place(Vector2Int cell, Object item, int turn)
-        {
-            if (item is SmartTile smart) return PlaceSmart(cell, smart, turn);
-            if (item is GameObject prefab) return PlacePrefab(cell, prefab, turn);
-            return false;
-        }
-
-        /// <summary>Ставить звичайний префаб (замінює наявний).</summary>
-        public bool PlacePrefab(Vector2Int cell, GameObject prefab, int turn)
-        {
-            if (data == null || prefab == null || !IsInside(cell)) return false;
-            turn = HexMath.Mod6(turn);
-
-            var old = GetTile(cell);
-            if (old != null && old.smart == null && old.prefab == prefab && old.turn == turn) return false;
-
-            RecordData("Place hex tile");
-            if (old != null) Kill(old.gameObject);
-            Spawn(cell, prefab, turn, null);
-            data.Set(cell, prefab, turn);
-            RefreshNeighbours(cell);
-            return true;
-        }
-
         /// <summary>
-        /// Ставить розумний тайл: Random — випадковий варіант/поворот, Connected — форма за сусідами.
-        /// Якщо на клітинці вже стоїть цей самий SmartTile, нічого не робить (щоб протягування мишею не «перекидало кубик»).
+        /// Ставить тип на клітинку. Вигляд — з палітри: префаб ставиться з поворотом turn,
+        /// розумний тайл сам вибирає варіант і поворот (Random — випадково, Connected — за сусідами).
+        /// Якщо на клітинці вже стоїть цей тип із розумним тайлом, нічого не робить (протягування мишею не «перекидає кубик»).
         /// </summary>
-        public bool PlaceSmart(Vector2Int cell, SmartTile smart, int turn)
+        public bool Place(Vector2Int cell, HexCellType type, int turn = 0)
         {
-            if (data == null || smart == null || !IsInside(cell)) return false;
+            if (map == null || type == HexCellType.None || !IsInside(cell)) return false;
+            var tile = palette != null ? palette.Get(type) : null;
+            if (tile == null)
+            {
+                Debug.LogWarning($"[HexGrid] Для типу {type} у палітрі не призначено тайл.", this);
+                return false;
+            }
 
+            turn = HexMath.Mod6(turn);
             var old = GetTile(cell);
-            if (old != null && old.smart == smart) return false;
+            GameObject prefab;
+            int variant = 0;
+            SmartTile smart = tile as SmartTile;
 
-            int mask = smart.IsConnected ? ConnectionMask(cell, smart) : 0;
-            if (!smart.TryPick(mask, turn, null, 0, out var pick)) return false;
+            if (smart != null)
+            {
+                if (old != null && old.type == type) return false;
+                int mask = smart.IsConnected ? ConnectionMask(cell, smart) : 0;
+                if (!smart.TryPick(mask, turn, null, 0, out var pick)) return false;
+                prefab = pick.prefab;
+                turn = pick.turn;
+                variant = Mathf.Max(0, smart.IndexOfVariant(prefab));
+            }
+            else
+            {
+                prefab = tile as GameObject;
+                if (prefab == null) return false;
+                if (old != null && old.type == type && old.prefab == prefab && old.turn == turn) return false;
+            }
 
-            RecordData("Place smart tile");
+            RecordUndo("Place hex tile");
             if (old != null) Kill(old.gameObject);
-            Spawn(cell, pick.prefab, pick.turn, smart);
-            data.Set(cell, pick.prefab, pick.turn, smart);
+            Spawn(cell, type, prefab, turn, variant, smart);
+            map.Set(cell, type, turn, variant);
             RefreshNeighbours(cell);
+            CellChanged?.Invoke(cell);
             return true;
         }
 
         public bool Remove(Vector2Int cell)
         {
-            if (data == null) return false;
+            if (map == null) return false;
             var old = GetTile(cell);
-            bool inData = data.TryGet(cell, out _);
+            bool inData = map.TryGet(cell, out _);
             if (old == null && !inData) return false;
 
-            RecordData("Remove hex tile");
+            RecordUndo("Remove hex tile");
             if (old != null) Kill(old.gameObject);
             instances.Remove(cell);
-            data.Remove(cell);
+            map.Remove(cell);
             RefreshNeighbours(cell);
+            CellChanged?.Invoke(cell);
             return true;
         }
 
         /// <summary>Ручний поворот. Для Connected-тайла він протримається до наступної зміни сусідів.</summary>
         public bool Rotate(Vector2Int cell, int steps)
         {
-            if (data == null) return false;
+            if (map == null) return false;
             var tile = GetTile(cell);
             if (tile == null || HexMath.Mod6(steps) == 0) return false;
 
-            RecordData("Rotate hex tile");
+            RecordUndo("Rotate hex tile");
             SetTurn(tile, HexMath.Mod6(tile.turn + steps));
             // Префаб із HexConnector після повороту відкриває інші сторони — сусідні дороги перебудуються.
             RefreshNeighbours(cell);
+            CellChanged?.Invoke(cell);
             return true;
         }
 
         /// <summary>Заповнює всі порожні клітинки в радіусі.</summary>
-        public int FillEmpty(Object item, int turn)
+        public int FillEmpty(HexCellType type, int turn = 0)
         {
-            if (data == null || item == null) return 0;
+            if (map == null || type == HexCellType.None) return 0;
             int n = 0;
             foreach (var cell in HexMath.CellsInRadius(Radius))
-                if (GetTile(cell) == null && Place(cell, item, turn)) n++;
+                if (GetTile(cell) == null && Place(cell, type, turn)) n++;
             return n;
         }
 
-        /// <summary>Прибирає тайли, що опинились за межею радіуса (наприклад, після його зменшення).</summary>
+        /// <summary>Прибирає клітинки, що опинились за межею радіуса (наприклад, після його зменшення).</summary>
         public int RemoveOutside()
         {
-            if (data == null) return 0;
+            if (map == null) return 0;
             EnsureCache();
             var cells = new List<Vector2Int>();
             foreach (var kv in instances) if (!IsInside(kv.Key)) cells.Add(kv.Key);
-            foreach (var e in data.Entries) if (!IsInside(e.cell) && !cells.Contains(e.cell)) cells.Add(e.cell);
+            foreach (var c in map.cells) if (!IsInside(c.cell) && !cells.Contains(c.cell)) cells.Add(c.cell);
             foreach (var c in cells) Remove(c);
             return cells.Count;
         }
 
+        /// <summary>Очищає карту (дані й тайли).</summary>
         public void ClearAll()
         {
-            if (data == null) return;
-            RecordData("Clear hex map");
+            if (map == null) return;
+            RecordUndo("Clear hex map");
             DestroyAllInstances();
-            data.Clear();
+            map.Clear();
+            MapRebuilt?.Invoke();
         }
 
-        /// <summary>Знищує всі об'єкти тайлів і створює їх заново з CityMapData.</summary>
+        /// <summary>Прибирає лише об'єкти тайлів; дані карти не змінюються.</summary>
+        public void ClearVisuals() => DestroyAllInstances();
+
+        /// <summary>Знищує всі об'єкти тайлів і будує їх заново з HexMapData через палітру.</summary>
         public void RebuildFromData()
         {
-            if (data == null) return;
             DestroyAllInstances();
-            foreach (var e in data.Entries)
-                if (e.prefab != null) Spawn(e.cell, e.prefab, e.turn, e.smart);
+            if (map == null) return;
+
+            int missing = 0;
+            // Копія: SpawnFromData може оновити варіант у map.cells, якщо тайл у палітрі змінився.
+            var cells = new List<HexCellData>(map.cells);
+            foreach (var c in cells)
+                if (!SpawnFromData(c)) missing++;
+
+            // Connected-тайли перевіряють сусідів: якщо збережена форма ще підходить, вона лишається.
+            RefreshAllSmart();
+
+            if (missing > 0)
+                Debug.LogWarning($"[HexGrid] {missing} клітинок не показано: для їхніх типів у палітрі нема тайла.", this);
+            MapRebuilt?.Invoke();
         }
 
         // ------------------------------------------------------------ розумні тайли
@@ -327,12 +363,7 @@ namespace KingdomBouns.CityMap
             for (int e = 0; e < 6; e++)
             {
                 var n = HexMath.Neighbour(cell, e);
-                bool connected;
-                if (!IsInside(n)) connected = smart.connectOutside;
-                else
-                {
-                    connected = smart.ConnectsTo(GetTile(n), e);
-                }
+                bool connected = !IsInside(n) ? smart.connectOutside : smart.ConnectsTo(GetTile(n), e);
                 if (connected) mask |= 1 << e;
             }
             return mask;
@@ -348,7 +379,7 @@ namespace KingdomBouns.CityMap
             if (!tile.smart.TryPick(mask, tile.turn, tile.prefab, tile.turn, out var pick)) return false;
             if (pick.prefab == tile.prefab && pick.turn == tile.turn) return false;
 
-            RecordData("Update smart tile");
+            RecordUndo("Update smart tile");
             if (pick.prefab == tile.prefab)
             {
                 SetTurn(tile, pick.turn);
@@ -356,10 +387,13 @@ namespace KingdomBouns.CityMap
             else
             {
                 var smart = tile.smart;
+                var type = tile.type;
+                int variant = Mathf.Max(0, smart.IndexOfVariant(pick.prefab));
                 Kill(tile.gameObject);
-                Spawn(cell, pick.prefab, pick.turn, smart);
-                data.Set(cell, pick.prefab, pick.turn, smart);
+                Spawn(cell, type, pick.prefab, pick.turn, variant, smart);
+                map.Set(cell, type, pick.turn, variant);
             }
+            CellChanged?.Invoke(cell);
             return true;
         }
 
@@ -375,7 +409,7 @@ namespace KingdomBouns.CityMap
         /// <summary>Перераховує всі Connected-тайли (наприклад, після зміни форм у SmartTile).</summary>
         public int RefreshAllSmart()
         {
-            if (data == null) return 0;
+            if (map == null) return 0;
             EnsureCache();
             var cells = new List<Vector2Int>(instances.Keys);
             int n = 0;
@@ -391,10 +425,39 @@ namespace KingdomBouns.CityMap
 #endif
             tile.turn = HexMath.Mod6(turn);
             tile.transform.localRotation = HexMath.Turn(tile.turn);
-            data.Set(tile.cell, tile.prefab, tile.turn, tile.smart);
+            map.Set(tile.cell, tile.type, tile.turn, tile.variant);
         }
 
         // ------------------------------------------------------------ внутрішнє
+
+        /// <summary>Ставить тайл зі збережених даних (без перевибору, якщо варіант ще існує).</summary>
+        private bool SpawnFromData(HexCellData c)
+        {
+            var tile = palette != null ? palette.Get(c.type) : null;
+            if (tile == null) return false;
+
+            if (tile is GameObject go)
+            {
+                Spawn(c.cell, c.type, go, c.turn, 0, null);
+                return true;
+            }
+            if (tile is SmartTile smart)
+            {
+                var prefab = smart.VariantAt(c.variant);
+                int turn = c.turn;
+                if (prefab == null)
+                {
+                    // Тайл у палітрі змінили — збереженого варіанта вже нема, вибираємо заново.
+                    if (!smart.TryPick(0, c.turn, null, 0, out var pick)) return false;
+                    prefab = pick.prefab;
+                    turn = pick.turn;
+                    map.Set(c.cell, c.type, turn, Mathf.Max(0, smart.IndexOfVariant(prefab)));
+                }
+                Spawn(c.cell, c.type, prefab, turn, Mathf.Max(0, smart.IndexOfVariant(prefab)), smart);
+                return true;
+            }
+            return false;
+        }
 
         private void DestroyAllInstances()
         {
@@ -402,10 +465,11 @@ namespace KingdomBouns.CityMap
             for (int i = root.childCount - 1; i >= 0; i--)
                 Kill(root.GetChild(i).gameObject);
             instances.Clear();
+            cachedChildCount = root.childCount;
             cacheValid = true;
         }
 
-        private HexCell Spawn(Vector2Int cell, GameObject prefab, int turn, SmartTile smart)
+        private HexCell Spawn(Vector2Int cell, HexCellType type, GameObject prefab, int turn, int variant, SmartTile smart)
         {
             GameObject go = null;
 #if UNITY_EDITOR
@@ -414,7 +478,7 @@ namespace KingdomBouns.CityMap
 #endif
             if (go == null) go = Instantiate(prefab, TilesRoot);
 
-            go.name = $"{prefab.name} ({cell.x},{cell.y})";
+            go.name = $"{type} ({cell.x},{cell.y})";
             go.transform.localPosition = HexMath.CellToLocal(cell, HexSize);
             go.transform.localRotation = HexMath.Turn(turn);
             go.transform.localScale = Vector3.one * HexSize;
@@ -422,8 +486,10 @@ namespace KingdomBouns.CityMap
             var hc = go.GetComponent<HexCell>();
             if (hc == null) hc = go.AddComponent<HexCell>();
             hc.cell = cell;
+            hc.type = type;
             hc.prefab = prefab;
             hc.turn = HexMath.Mod6(turn);
+            hc.variant = variant;
             hc.smart = smart;
 
 #if UNITY_EDITOR
@@ -449,10 +515,10 @@ namespace KingdomBouns.CityMap
             Destroy(go);
         }
 
-        private void RecordData(string undoName)
+        private void RecordUndo(string undoName)
         {
 #if UNITY_EDITOR
-            if (!Application.isPlaying && data != null) Undo.RecordObject(data, undoName);
+            if (!Application.isPlaying) Undo.RecordObject(this, undoName);
 #endif
         }
 
@@ -460,7 +526,7 @@ namespace KingdomBouns.CityMap
 
         private void OnDrawGizmos()
         {
-            if (!drawGrid || data == null) return;
+            if (!drawGrid || map == null) return;
             Gizmos.color = gridColor;
             Gizmos.matrix = transform.localToWorldMatrix;
             float s = HexSize;

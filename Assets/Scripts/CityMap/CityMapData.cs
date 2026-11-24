@@ -5,6 +5,7 @@ using UnityEngine;
 namespace KingdomBouns.CityMap
 {
     /// <summary>
+    /// СТАРИЙ ФОРМАТ (до HexMapData + HexCellType). Лишився тільки для імпорту в Hex Map Editor.
     /// Дані карти міста: розмір сітки і що стоїть на кожній клітинці (префаб + поворот).
     /// Сцена будується з цих даних (HexGrid.RebuildFromData), тож карту можна завантажити і в рантаймі.
     /// </summary>

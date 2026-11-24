@@ -171,6 +171,59 @@ namespace KingdomBouns.CityMap.EditorTools
             return tex;
         }
 
+        // ------------------------------------------------------------ тип клітинки за назвою
+
+        // Альтернативні назви (як звуться моделі/префаби в проєкті) → тип.
+        private static readonly KeyValuePair<string, HexCellType>[] TypeAliases =
+        {
+            new KeyValuePair<string, HexCellType>("townhole", HexCellType.TownHall),
+            new KeyValuePair<string, HexCellType>("ratusha", HexCellType.TownHall),
+            new KeyValuePair<string, HexCellType>("windmill", HexCellType.Mill),
+            new KeyValuePair<string, HexCellType>("mlun", HexCellType.Mill),
+            new KeyValuePair<string, HexCellType>("gild", HexCellType.Guild),
+            new KeyValuePair<string, HexCellType>("fields", HexCellType.Field),
+            new KeyValuePair<string, HexCellType>("forest", HexCellType.Forest),
+            new KeyValuePair<string, HexCellType>("lab", HexCellType.Laboratory),
+        };
+
+        /// <summary>
+        /// Вгадує HexCellType за назвою асета: tile_meadow_1 → Meadow, road_smart → Road, TownHole → TownHall.
+        /// Береться найдовший збіг (щоб «fields» не плутався з «field» тощо). None — якщо нічого не підійшло.
+        /// </summary>
+        public static HexCellType GuessType(string assetName)
+        {
+            if (string.IsNullOrEmpty(assetName)) return HexCellType.None;
+            string n = assetName.ToLowerInvariant().Replace("_", "").Replace(" ", "").Replace("-", "");
+            HexCellType best = HexCellType.None;
+            int bestLen = 0;
+
+            foreach (HexCellType t in System.Enum.GetValues(typeof(HexCellType)))
+            {
+                if (t == HexCellType.None) continue;
+                string key = t.ToString().ToLowerInvariant();
+                if (key.Length > bestLen && n.Contains(key)) { best = t; bestLen = key.Length; }
+            }
+            foreach (var a in TypeAliases)
+                if (a.Key.Length > bestLen && n.Contains(a.Key)) { best = a.Value; bestLen = a.Key.Length; }
+            return best;
+        }
+
+        /// <summary>Розкладає об'єкти по порожніх слотах палітри за назвою. Повертає кількість призначених.</summary>
+        public static int AssignByName(HexTilePalette palette, IEnumerable<Object> items, bool overwrite = false)
+        {
+            int n = 0;
+            foreach (var o in items)
+            {
+                if (!HexTilePalette.IsPlaceable(o)) continue;
+                var t = GuessType(o.name);
+                if (t == HexCellType.None) continue;
+                if (!overwrite && palette.Has(t)) continue;
+                palette.Set(t, o);
+                n++;
+            }
+            return n;
+        }
+
         // ------------------------------------------------------------ віджет ребер
 
         private static Vector3 HexPoint(Vector2 c, float radius, float deg)
