@@ -334,6 +334,29 @@ namespace KingdomBouns.CityMap
         /// <summary>Прибирає лише об'єкти тайлів; дані карти не змінюються.</summary>
         public void ClearVisuals() => DestroyAllInstances();
 
+        /// <summary>
+        /// Перебудовує одну клітинку з HexMapData (після того, як дані змінив хтось інший — наприклад, економіка міста).
+        /// Сусідні розумні тайли (дороги) перераховуються. Варіант −1 у даних — вибрати заново.
+        /// </summary>
+        public bool RebuildCell(Vector2Int cell)
+        {
+            if (map == null) return false;
+
+            RecordUndo("Rebuild hex cell");
+            var old = GetTile(cell);
+            if (old != null)
+            {
+                Kill(old.gameObject);
+                instances.Remove(cell);
+            }
+
+            bool spawned = map.TryGet(cell, out var data) && SpawnFromData(data);
+            RefreshCell(cell);
+            RefreshNeighbours(cell);
+            CellChanged?.Invoke(cell);
+            return spawned;
+        }
+
         /// <summary>Знищує всі об'єкти тайлів і будує їх заново з HexMapData через палітру.</summary>
         public void RebuildFromData()
         {

@@ -1,5 +1,6 @@
 ﻿using KingdomBouns.CityMap;
 using KingdomBouns.Core;
+using KingdomBouns.Economy;
 using UnityEngine;
 
 namespace KingdomBouns
@@ -23,6 +24,10 @@ namespace KingdomBouns
         [Tooltip("Тимчасово, поки нема сервісу-завантажувача: JSON карти, яка відкриється на старті.")]
         [SerializeField] private TextAsset _testMap;
 
+        [Header("Економіка")]
+        [Tooltip("Параметри будівель і правила економіки міст.")]
+        [SerializeField] private CityEconomyConfig _economyConfig;
+
         protected override void RegisterServices(ServicesProvider services)
         {
             services.AddService(new SaveService());
@@ -44,6 +49,12 @@ namespace KingdomBouns
                 services.AddService(new HexMapService(grid));
             else
                 Debug.LogError("[CitySceneBinder] На сцені нема HexGrid — HexMapService не зареєстровано.", this);
+
+            services.AddService(new EmpireResourcesService());
+            if (_economyConfig != null)
+                services.AddService(new CityEconomyService(_economyConfig));
+            else
+                Debug.LogError("[CitySceneBinder] Не призначено CityEconomyConfig — CityEconomyService не зареєстровано.", this);
         }
 
         protected override void OnLaunched()

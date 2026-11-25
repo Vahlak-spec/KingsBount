@@ -8,6 +8,7 @@ namespace KingdomBouns.CityMap
     /// інакше старі карти й збереження почнуть показувати не те.
     ///   1..99    — земля й шляхи
     ///   100..199 — будівлі міста
+    ///   200..    — службові (будівництво тощо)
     /// </summary>
     public enum HexCellType
     {
@@ -32,5 +33,10 @@ namespace KingdomBouns.CityMap
         Library = 109,
         University = 110,
         Laboratory = 111,
+        House = 112,
+
+        // Службові
+        /// <summary>Будівельний майданчик: стоїть, поки будівля в черзі будівництва.</summary>
+        Construction = 200,
     }
 }

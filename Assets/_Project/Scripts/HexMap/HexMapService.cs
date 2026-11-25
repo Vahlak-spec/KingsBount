@@ -105,6 +105,12 @@ namespace KingdomBouns
 
         public bool Rotate(Vector2Int cell, int steps = 1) => IsBound && _grid.Rotate(cell, steps);
 
+        /// <summary>
+        /// Перебудувати вигляд однієї клітинки з даних карти — коли дані змінив інший сервіс
+        /// (наприклад, економіка поставила будівництво). Інші клітинки не перевіряються.
+        /// </summary>
+        public bool UpdateCell(Vector2Int cell) => IsBound && _grid.RebuildCell(cell);
+
         // --- запити
 
         public HexCellType GetCellType(Vector2Int cell) => IsBound ? Map.GetCellType(cell) : HexCellType.None;
